@@ -51,7 +51,7 @@ biocLite("edgeR")
 biocLite("limma")
 biocLite("Glimma")
 ```
-Note: this step only needs to be completed once. After a package has been installed on your computer, you do not need to reinstall it. Although, you may need to update a package if a new version is released. 
+Note: the installation step only needs to be completed once. After a package has been installed on your computer, you do not need to reinstall it. Although, you may need to update a package if a new version is released. 
 
 ##Load packages (libraries)  
 The second step after package installation is to load the libraries into your R session. Installing the packages places the required files onto your computer, but you need to tell R that you want to access those files. This is important because as time goes on you will install more and more packages, and this could cause issues if they were all simultaneously loaded. It is good practice to only load the libraries you need. Loading libraries is something that must be performed everytime your R session is closed.
@@ -60,62 +60,67 @@ library(edgeR)
 library(limma)
 ```
 
-In this particular instance, it looks like loading edgeR automatically loads the limma package. This is not always the case, and I am showing both libraries in order to be explicit.
+In this particular instance, it looks like loading edgeR automatically loads the limma package. This is not always the case, and I am showing both libraries in order to be explicit. It is also worth knowing that loading required packages does not necessarily need to happen here. Indeed, futher along in this analysis we will load more libraries in an on-demand manner.  
 
 #Import data
-This matrix file was generated at the Broad institue. It is the processed data, the result of mapping (via [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml)) and counts quantified (using [RSEM](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-12-323)). There are a variety of ways to do this, and this is just one example. I use `dim()` to check the dimensions of this matrix (row, column), and `head()` to inspect the first 6 rows of the matrix.  
+After loading necessary libraries, the next step is to load the relevant data into our R environment. There are a variety of ways to do this, and this will be just one example. I use the `read.csv()` function here, but `read.table()` or any number of other functions could be used to import the data. I then use `dim()` to check the dimensions of this matrix (row, column), and `head()` to inspect the first 6 rows of the matrix.  
 
-Note: In this case we have a single matrix file, but this is not always true. In many instances each sample will have an individual file with the raw count data.
+Note: In this case we have a single matrix file, but this is not always true. In many instances each sample will have an individual file with the raw count data. In those cases, a user has several options, including loading all files as seperate variables (i.e., `genes_rsem_1` and `genes_rsem_2`), or concatenating individual files into a single variable. 
 ```{r}
-genes_rsem <- read.csv("nematocida.counts.matrix", stringsAsFactors = F, check.names = F)
+##=====================##
+
+genes_rsem <- read.csv("GSE106647_gene_counts.txt", stringsAsFactors = F, sep="\t")
 dim(genes_rsem)
+colnames(genes_rsem)
 head(genes_rsem)
 ```
 
-Note: the arguments in the `read.csv()` function were necessary for this analysis, which I discovered by trial and error, but that may not always be true.
+Here we can see that we have successfully loaded the data. We can see how large it is using `dim()`, `colnames()` gives us the column names which should be the sample names, and `head()` lets us check the first few rows of the counts matrix. In total, all of these small sanity checks suggest that we have a complete data set and the data looks to be in the proper format.
 
 ##Set up counts matrix
-We will use only a subset of the data in this case. We are only interested in the Control, ERTm1, and ERTm2 samples from L004. To do this, I make a new matrix consisting of the data columns we are interested in and the gene names are stored as rownames of this matrix. I then check the `dim()` to make sure I have all of the rows, and check `head()` to make sure I have the correct columns and that the rows are named properly.
+In this particular analysis, this step is somewhat superfluous. We could perform the next step using our `genes_rsem` object. However, I am leaving this step in for continuity with other analyses I've performed in this laboratory, and because there are certain situations where it would be useful to have both a `genes_rsem` object and a `counts_matrix` object, even if they are nearly identical. 
 ```{r}
-counts_matrix <- genes_rsem[,2:10]
+##=====================##
+
+counts_matrix <- genes_rsem[,2:25]
 rownames(counts_matrix) <- genes_rsem[,1]
-colnames(counts_matrix)
-dim(counts_matrix)
 head(counts_matrix)
 ```
 
 ##Generate DGEList object
-There are a number of ways to complete the previous two steps, and it's not critical how they are accopmlished. The end product of these import data steps is to have all the necessary data loaded into R in order to generate a DGEList object. A DGEList object is a class of data storage object that edgeR and limma functions can read and operate on.  
+There are a number of ways to complete the previous two steps, and it's not critical how they are accopmlished. The end product of these import data steps is to have all the necessary data loaded into R in order to generate a DGEList object. A DGEList object is a class of data storage object that edgeR and limma functions can read and operate on, and additional information about them can be found by reading the edgeR documentation.  
 ```{r}
 x <- DGEList(counts=counts_matrix, genes = row.names(counts_matrix))
 class(x)
 x
 ```
 
-NOTE: There is a second function, `readDGE()`, that will also generate our DGElist object. `readDGE()` may be used to concatenate several sample files into a single DGElist. Since our data was provided in a single matrix file we used the `DGEList()` function. 
+NOTE: There is a second function, `readDGE()`, that will also generate our DGElist object. `readDGE()` may be used to concatenate several sample files into a single DGElist. Since our data was provided in a single matrix file, we used the `DGEList()` function. 
 
 #Organize data
 Now that we have imported our data and created our DGEList object we move to the next step. Organizing the data is a crucial step for almost any analysis. We are going to revise the names, assign experimental groups (e.g., infected or uninfected, wt or mutant, etc.). Many of these steps are not set in stone and must be adapted for each new experiment.  
 
 ##Simplify names
-This step is not necessary, but it is a quality of life improvement that will make things easier moving forward. I use the `substring()` and `gsub()` functions to remove characters I am not interested in and shorten the sample names.  
+This step is not necessary, but it is a quality of life improvement that will make things easier moving forward. Earlier, when we used `colnames()` we could see the extraneous information in the sample names, most notably the "Counts_" at the start of each name. I use the `gsub()` function to remove this "Counts_"tag that we are not interested in. We save this to the `samplenames` object so we can check that our `gsub()` worked as expected. This is not strictly neccessary though, and one could save directly to `colnames(x)`. If you're wrong though, you'll need to reload the initial steps to reset `x`.  
 ```{r}
-samplenames <- substring(colnames(x),7,nchar(colnames(x)))
-samplenames <- gsub("_L004","", samplenames)
-colnames(x) <- samplenames
+##=====================##
+
+samplenames <- gsub("Counts_","",colnames(x))
 samplenames
+colnames(x) <- samplenames
+colnames(x)
 ```
 
 ##Group by treatments
-All samples are of the same strain, same genotype, raised at the same temperature, were processed in the same RNA-seq lane. Therefore, we will not include these factors here. Other factors that could arise: date harvested, date sequenced, treated with drug, and many others. In general, one should be aware of "batch" effects, that is, some factor that contributes to variabilty other than our experimental factors. Those sources of variability could be any of the factors listed already, and any number of other items. Further down the workflow, we will see how to investigate some of these potential batch effects.  
+We sort our experiment into groups. In this case our groups are the different genotypes sequenced. Other factors that could arise: date harvested, date sequenced, treated with drug, and many others. In general, one should be aware of "batch" effects, that is, some factor that contributes to variabilty other than our experimental factors. Those sources of variability could be any of the factors listed already, and any number of other items. Further down the workflow, we will see how to investigate some of these potential batch effects.  
 
 For our analysis, we only have one variable, which is treatment with ERTmx or untreated. The following steps assign the treatment group to the samples in the `$group` slot.
 
 ```{r}
-treat <- as.factor(rep(c("un", "ERTm1", "ERTm2"),3)) #Assigns exp. factors to groups
-#Relevels factors to make control "un" the top/first factor
-treat <- factor(treat, levels = c("un", "ERTm1", "ERTm2")) 
-x$samples$group <- treat
+##=====================##
+
+group <- as.factor(rep(c("N2","adr","adr_rrf3","adr_rrf3_rde1","adr_rrf3_rde4","rrf3"),c(4,4,4,4,4,4)))
+x$samples$group <- group
 x$samples
 ```
 
@@ -126,7 +131,7 @@ Depending on the experiment, there may be more to do at this step (probably not 
 ##Data pre-processing
 Before we begin to analyze the data, there are certain steps to take to prepare the data.  
 
-This first block is taking the counts-per-million (cpm) of the reads aswell as the logcpm. These values will be used further down to highlight some of the pre-processing we've performed.  
+This first block is taking the counts-per-million (cpm) of the reads aswell as the logcpm. These values will be used further down to perform and highlight some of the pre-processing we will perform.  
 ```{r}
 cpm <- cpm(x)
 lcpm <- cpm(x, log=T)
@@ -146,15 +151,19 @@ Here, we use the cpm values calculated previous to remove lowly expressed genes.
 ```{r}
 dim(x)
 #1. Check the number of genes that are zero in each sample
-table(rowSums(x$counts==0)==12)
+table(rowSums(x$counts==0)==24)
 #2. Check and store the genes that meet our threshold
-keep.exprs <- rowSums(cpm>1)>=3
+keep.exprs <- rowSums(cpm>1)>=4
 #3. Keep the genes that meet our threshold, drop genes that do not
 x <- x[keep.exprs,, keep.lib.sizes=F]
 dim(x)
 ```
 
-In this case, we've filtered out roughly, 9,000 genes. It should be noted that our cutoff is arbitrary. Here, we have set a threshold at genes which have a cpm of at least 1 in at least 3 samples. This threshold can be set at whatever you'd like, but it should be noted that having many genes with low counts tends to throw off the linear model and may produce false positives.
+In this case, we start out with 17,499 genes. This is fewer than the total number of genes found in *C. elegans* (>20,000). This suggests that a number of genes have already been filtered out. 
+
+Our next test, the `table(rowSums(x$counts==0)==24)`, shows FALSE 17,499, which means that there were no genes that had no counts across all 24 samples. I would predict that the raw data we downloaded from GEO and loaded here already removed genes with no count data across all samples. 
+
+Our next threshold, `keep.exprs <- rowSums(cpm>1)>=4`, which will keeps genes with at least a cpm of 1 in at least four samples, is then performed. We can see in our final `dim(x)` call, that we reduce our total gene count to 14,767, a reduction of ~3,000 genes. Removing the low count genes will help to make the differential expression analysis more robust.
 
 ##Graphs showing filtering of low-count genes
 These graphs show how the distribution of our data changes after our thresholding and pre-processing. On the left, we see the large spike of genes at very low counts. On the right, we see we have eliminated these low-count genes. 
@@ -183,6 +192,7 @@ for (i in 2:nsamples) {
 legend("topright", samplenames, text.col = col, bty="n", cex=0.6)
 ```
 
+
 ##Normalizing gene expression distributions
 Our data is in raw scale prior to normalization. `calcNormFactors()` function here uses trimmed mean of M-values, "TMM", to normalize the samples based on library size. Picture it this way, we don't want to say that transcript x is more abundant in sample A versus sample B simply because sample A has more reads.
 ```{r}
@@ -193,35 +203,44 @@ x$samples$norm.factors
 
 #Unsupervised clustering
 ##Looking for batch effects
-Dimension 1 (x-axis in left plot) represents the largest contributor to the variance within the data. What this shows is that all ERTm1 and ERTm2 treated samples are quite similar to each other, while being quite different than untreated N2 samples. Differences in the replicates can be seen in the higher dimensions. In general, one would try to catch batch effects here. If samples were prepared on seperate dates, or ran on seperate lanes, a user could graph the samples here, labelled by their preparation dates, and see if samples cluster by date in a higher dimension. This would suggest a batch effect related to preparation date. Dealing with batch effects (other than ignoring them) is another issue and I won't address that here.
+Dimension 1 (x-axis in left plot) represents the largest contributor to the variance within the data. In general, one would try to catch batch effects here. If samples were prepared on seperate dates, or ran on seperate lanes, a user could graph the samples here, labelled by their preparation dates, and see if samples cluster by date in a higher dimension. This would suggest a batch effect related to preparation date. Dealing with batch effects (other than ignoring them) is a complicated matter.
 ```{r}
 lcpm <- cpm(x, log=T)
 par(mfrow=c(1,2))
-col.group <- treat
+col.group <- group
 levels(col.group) <- brewer.pal(nlevels(col.group), "Set1")
 col.group<-as.character(col.group)
-plotMDS(lcpm, labels = treat, col=col.group)
-title(main="Treatments")
-plotMDS(lcpm, labels = treat, col=col.group, dim=c(3,4))
-title(main="Treatments - dim 3,4")
+plotMDS(lcpm, labels = group, col=col.group)
+title(main="Genotype - dim 1,2")
+plotMDS(lcpm, labels = group, col=col.group, dim=c(3,4))
+title(main="Genotype - dim 3,4")
 ```
+
+These data do not cluster very well, particularly the N2 control samples. This doesn't disqualify the data set, but users should keep in mind that there was a lot of varibility in their datasets. 
 
 #Differential expression analysis
 ##Create design matrix and contrasts
-The design matrix and contrasts are how we will define our comparisons. Again, there are many ways to do this, and I recommend that you read the edgeR and limma manuals. In R, you can use the `browseVignettes()` and the `vignette()` functions to access these guides.
-The first matrix we create is the design matrix. In this case we are only investigating ERTm1 or ERTm2 infections that we named earlier in this analysis the `treat` variable. You can make this as simple or as complicated as the experiment warrants, adding in temperature or time point factors as necessary. 
+The design matrix and contrasts are how we will define our comparisons. You can make this as simple or as complicated as the experiment warrants, adding in temperature or time point factors as necessary. Again, there are many ways to do this, and I recommend that you read the edgeR and limma manuals. In R, you can use the `browseVignettes()` and the `vignette()` functions to access these guides.
+The first matrix we create is the design matrix. In our experiment we are interested in comparing mutant genotype to our N2 control specimens. Earlier in this analysis we created the `group` variable and we can use this here to define our design matrix.
+
 ```{r}
-design <- model.matrix(~0+treat)
-colnames(design) <- gsub("treat", "", colnames(design)) #removes the word "treat" from columns
+##=====================##
+
+design <- model.matrix(~0+group)
+colnames(design) <- gsub("group", "", colnames(design))
 design
 ```
-The contrast matrix defines the comparisons I want to make. There are other ways to make this matrix and to perform the comparisons, but what I have done here is the most explicit way of doing this. This is helpful so that you understand exactly what comparisons are being made. Some of the other methods are more implicit and I don't see the benefit to them currently, apart from being slightly easier to type.
+The contrast matrix defines the comparisons that we would like to make. There are other ways to make this matrix and to perform the comparisons, but what I have done here is the most explicit method of doing this. This is helpful so that you understand exactly what comparisons are being made. Some of the other methods are more implicit and I don't see the benefit to them currently, apart from being slightly easier to type. Here, I am performing simple exp vs control comparisons; all genotypes are compared to N2.
 ```{r}
 contrast.matrix <- makeContrasts(
-  ERTm1vsN2 = ERTm1 - un,
-  ERTm2vsN2 = ERTm2 - un,
-  levels = colnames(design)
-  )
+    adrvsN2 = adr - N2,
+    adr_rrf3vsN2 = adr_rrf3 - N2,
+    adr_rrf3_rde1vsN2 = adr_rrf3_rde1 - N2,
+    adr_rrf3_rde4vsN2 = adr_rrf3_rde4 - N2,
+    rrf3vsN2 = rrf3 - N2,
+    levels = colnames(design)
+    )
+
 contrast.matrix
 ```
 
@@ -247,152 +266,9 @@ summary(dt)
 ```
 
 ##Visualize the above data with Venn diagrams
-When analyzing datasets with more than two comparisons, it is possible to generate diagrams of 3 or more comparisons by adding additional columns of `dt`
+When analyzing datasets with more than two comparisons, it is possible to generate diagrams of 3 or more comparisons by adding additional columns of `dt`. 
 ```{r}
 vennDiagram(dt[,1:2], circle.col = c("red", "blue"), include = "up", show.include = T)
-```
-
-##Use R to save common differentially expressed genes in a list
-```{r}
-de.common.up <- which(dt[,1] !=0 & dt[,2]!=0)
-length(de.common.up)
-common.genes <- efit$genes[de.common.up,1]
-common.genes
-#write.csv(common.genes, "2018_08_03_common_genes_up.csv")
-```
-
-##Use R to generate data objects containing all differentially expressed genes. 
-The p.value cutoff can be adjusted to whatever you'd like.  
-Note: that the cutoff refers to the adjusted p-value, which in our case is the FDR value. FDR is the output of a statistical test that incorporates multiple-hypothesis testing and should be the value that you refer to. It is also possible to include a logFC cutoff here. However, as stated above, there are reasons why that cutoff may not be accurate.
-```{r}
-p <- 0.05
-ERTm1.vs.N2 <- topTable(efit, coef = 1, n=Inf, p.value = p)
-dim(ERTm1.vs.N2)
-ERTm1.vs.N2
-ERTm2.vs.N2 <- topTable(efit, coef = 2, n=Inf, p.value = p)
-dim(ERTm2.vs.N2)
-ERTm2.vs.N2
-```
-
-#Heatmaps
-The heatmaps show the relative expression of genes across all samples. Samples are averaged across the rows, so a dark red cell indicates a gene is more highly expressed in that sample than the average expression of the gene in all samples.
-
-##Differentially expressed genes in ERTm1 treated animals (87 genes in total) ranked by FDR
-```{r, fig.height=15, fig.width=10}
-library(gplots)
-i <- which(v$genes$genes %in% ERTm1.vs.N2[,1])
-mycol <- colorpanel(1000,"blue","white","red")
-heatmap.2(v$E[i,], scale = "row", labRow = v$genes$genes[i], labCol=treat, col=mycol, 
-          trace="none", density.info = "none", margins = c(5,10), lhei = c(1,8), lwid = c(1,4),
-          dendrogram = "column",cexRow = 1, cexCol = 1, keysize = 1)
-```
-
-##Top 100 differentially expressed genes in ERTm2 treated animals (ranked by FDR)
-```{r fig.height=15, fig.width=10}
-ERTm2.vs.N2.top <- ERTm2.vs.N2$genes[1:100]
-i <- which(v$genes$genes %in% ERTm2.vs.N2.top)
-heatmap.2(v$E[i,], scale = "row", labRow = v$genes$genes[i], labCol=treat, col=mycol, 
-          trace="none", density.info = "none", margins = c(5,5), lhei = c(1,8), lwid = c(1,4),
-          dendrogram = "column",cexRow = 1, cexCol = 1, keysize = 1)
-```
-
-##Mean difference (MD) plots
-```{r}
-plotMD(efit, column=1, status = dt[,1], main=colnames(efit)[1])
-```
-```{r}
-plotMD(efit, column=2, status = dt[,2], main=colnames(efit)[2])
-```
-
-##Extracting gene lists
-Here I extract more gene lists of interest.
-```{r}
-#Create vector containing commone UP gene names
-de.common.up <- which(dt[,1] !=0 & dt[,2]!=0)
-length(de.common.up)
-common.genes <- efit$genes[de.common.up,1]
-common.genes
-#collect names and logFC values of common UP genes
-ERTm1.vs.N2.common <- ERTm1.vs.N2[common.genes,2]
-ERTm2.vs.N2.common <- ERTm2.vs.N2[common.genes,2]
-de <- data.frame(ERTm1.vs.N2.common, ERTm2.vs.N2.common, row.names = ERTm1.vs.N2[common.genes,1])
-de
-```
-```{r}
-#Collect unique genes from both sets
-#Unique for ERTm1
-de.ertm1.unique <- which(dt[,1] !=0 & dt[,2]==0)
-length(de.ertm1.unique)
-ERTm1.vs.N2.unique <- efit$genes[de.ertm1.unique,1]
-ERTm1.vs.N2.unique <- ERTm1.vs.N2[ERTm1.vs.N2.unique,1:2]
-ERTm1.vs.N2.unique
-
-#Unique UP for ERTm1 
-de.ertm1.unique.up <- which(dt[,1] ==1 & dt[,2]==0)
-length(de.ertm1.unique.up)
-ERTm1.vs.N2.unique.UP <- efit$genes[de.ertm1.unique.up,1]
-ERTm1.vs.N2.unique.UP <- ERTm1.vs.N2[ERTm1.vs.N2.unique.UP,1:2]
-ERTm1.vs.N2.unique.UP
-
-#unique for ERTm2
-de.ertm2.unique <- which(dt[,1] ==0 & dt[,2]!=0)
-length(de.ertm2.unique)
-ERTm2.vs.N2.unique <- efit$genes[de.ertm2.unique,1]
-ERTm2.vs.N2.unique <- ERTm2.vs.N2[ERTm2.vs.N2.unique,1:2]
-ERTm2.vs.N2.unique
-
-#unique UP for ERTm2
-de.ertm2.unique.up <- de.ertm2.unique <- which(dt[,1] ==0 & dt[,2]==1)
-length(de.ertm2.unique.up)
-ERTm2.vs.N2.unique.UP <- efit$genes[de.ertm2.unique.up,1]
-ERTm2.vs.N2.unique.UP <- ERTm2.vs.N2[ERTm2.vs.N2.unique.UP,1:2]
-```
-
-#Write to xlsx
-This is one useful package to write and generate spreadsheets directly from R. Refer to the manual as this package is quite powerful. I have not found it possible to write and format the excel file precicely how I'd want, so ultimately you'll probably have to do some formatting within excel.
-```{r eval=F}
-library(openxlsx)
-
-wb <- createWorkbook()
-addWorksheet(wb, sheetName = "Summary")
-addWorksheet(wb, sheetName = "Common UP")
-addWorksheet(wb, sheetName = "ERTm1 UP unique")
-addWorksheet(wb, sheetName = "ERTm2 UP unique")
-addWorksheet(wb, sheetName = "ERTm1 all")
-addWorksheet(wb, sheetName = "ERTm2 all")
-addWorksheet(wb, sheetName = "IPR")
-
-writeData(wb, "Summary", summary(dt, rowNames = F))
-setColWidths(wb, sheet = 1, cols = 1:3, widths = "auto")
-writeData(wb, "Common UP", de, rowNames = T)
-setColWidths(wb, sheet = 1, cols = 1:3, widths = "auto")
-writeData(wb, "ERTm1 UP unique", ERTm1.vs.N2.unique.UP)
-setColWidths(wb, sheet = 2, cols = 1:2, widths = "auto")
-writeData(wb, "ERTm2 UP unique", ERTm2.vs.N2.unique.UP)
-setColWidths(wb, sheet = 3, cols = 1:2, widths = "auto")
-writeData(wb, "ERTm1 all", ERTm1.vs.N2)
-setColWidths(wb, sheet = 4, cols = 1:2, widths = "auto")
-writeData(wb, "ERTm2 all", ERTm2.vs.N2)
-setColWidths(wb, sheet = 5, cols = 1:2, widths = "auto")
-
-saveWorkbook(wb, "2018_08_27_Nematocida_DEGenes.xlsx", overwrite = T)
-```
-
-#Glimma Plots
-Glimma plots will generate an HTML file and some javascript files. Together, they can be opened in your internet browser window and are an interactive way to explore the dataset. 
-
-##This Glimma plot is of ERTm1vsN2
-```{r eval=F}
-glMDPlot(efit, coef=1, status = dt[,1], main = colnames(efit)[1],
-         side.main ="genes", counts = x$counts, groups = treat, launch = F,
-         html = "2018_08_06_ERT1vsN2_MDplot")
-```
-
-##This Glimma plot is of ERTm2vsN2
-```{r eval=F}
-glMDPlot(efit, coef=2, status = dt[,2], main = colnames(efit)[2],
-         side.main ="genes", counts = x$counts, groups = treat, launch = F,
-         html = "2018_08_06_ERT2vsN2_MDplot")
 ```
 
 #Session info
