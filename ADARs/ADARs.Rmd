@@ -238,6 +238,7 @@ contrast.matrix <- makeContrasts(
     adr_rrf3_rde1vsN2 = adr_rrf3_rde1 - N2,
     adr_rrf3_rde4vsN2 = adr_rrf3_rde4 - N2,
     rrf3vsN2 = rrf3 - N2,
+    adr_rrf3vsrrf3 = adr_rrf3 - rrf3,
     levels = colnames(design)
     )
 
@@ -267,9 +268,48 @@ summary(dt)
 
 ##Visualize the above data with Venn diagrams
 When analyzing datasets with more than two comparisons, it is possible to generate diagrams of 3 or more comparisons by adding additional columns of `dt`. 
+
+###adr vs N2 compared to adr;rrf-3 vs N2
 ```{r}
 vennDiagram(dt[,1:2], circle.col = c("red", "blue"), include = "up", show.include = T)
 ```
+
+###adr;rrf-3 vs N2 compared to rrf-3 vs N2
+```{r}
+vennDiagram(dt[,c(2,5)], circle.col = c("red", "blue"), include = "up", show.include = T)
+```
+
+```{r}
+vennDiagram(dt[,c(1,2,5)], circle.col = c("red", "yellow", "blue"), include = "up", show.include = T)
+```
+
+#Comparing gene lists  
+There are a few scientific questions we can answer now that we have performed our differential expression analysis.  
+1. What is the overlap between the IPR gene set and the upregulated genes found in adr;rrf-3 mutants?
+We extract the differentially expressed genes and download them as a csv.
+
+```{r}
+p <- 0.05
+adr_rrf3.top <- topTable(efit, coef=2, n = Inf, p.value = p)
+
+adr_rrf3.up <- efit$genes$genes[which(dt[,2] == 1)]
+adr_rrf3.up <- adr_rrf3.top[adr_rrf3.up,]
+adr_rrf3.down <- efit$genes$genes[which(dt[,2] == -1)]
+adr_rrf3.down <- adr_rrf3.top[adr_rrf3.down,]
+
+dim(adr_rrf3.top)
+dim(adr_rrf3.up)
+dim(adr_rrf3.down)
+```
+lists are as long as expected, indicating that we extracted the right set of genes. Now we will write them to a csv file. I typically run the commadn once and then comment it out (by adding a `#` in front) so that I am not creating new copies, or overwriting my previous copy.
+
+```{r}
+write.csv(adr_rrf3.up, file = "adr_rrf3.up.csv")
+write.csv(adr_rrf3.down, file = "adr_rrf3.down.csv")
+```
+
+2. What IPR genes are endogenously silenced? 
+To answer this question, refer to supplemental file 4. It contains a list of "EAGs",  
 
 #Session info
 ```{r}
